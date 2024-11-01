@@ -2,6 +2,9 @@
 import pygame
 from pygame.locals import *
 
+import button
+import spritesheet
+
 # initialization
 pygame.init()
 
@@ -23,28 +26,54 @@ font4 = pygame.font.Font("fonts/Silkscreen-Regular.ttf", 72)
 
 # define game variables
 tile_size = 60 # 16:9 tile ratio
-scroll_threshold = 300
+
+scroll_threshold = 250
 screen_scroll = 0
 scroll_mult = 2 # possibly change later (if scrolling makes the player slightly faster or slower, movement could be an issue)2
 bg_scroll = 0
 
+# level editor variables
+rows = 18
+max_cols = 100
+ 
+# empty world data list
+world_data = []
+
+# create empty tile list
+for row in range(rows):
+  r = [0] * max_cols
+  world_data.append(r)
+
+# create ground
+for tile in range(0, max_cols):
+  world_data[rows - 3][tile] = 2
+
 # load assets
-grass_tile = pygame.image.load('assets/grass_tile.png')
+grass_tl = pygame.image.load('assets/grass_tl.png')
+grass_tm = pygame.image.load('assets/grass_tm.png')
+grass_tr = pygame.image.load('assets/grass_tr.png')
+grass_ml = pygame.image.load('assets/grass_ml.png')
+grass_m = pygame.image.load('assets/grass_m.png')
+grass_mr = pygame.image.load('assets/grass_mr.png')
+grass_bl = pygame.image.load('assets/grass_bl.png')
+grass_bm = pygame.image.load('assets/grass_bm.png')
+grass_br = pygame.image.load('assets/grass_br.png')
+
+grass_tiles = {
+  1: grass_tl,
+  2: grass_tm,
+  3: grass_tr,
+  4: grass_ml,
+  5: grass_m,
+  6: grass_mr,
+  7: grass_bl,
+  8: grass_bm,
+  9: grass_br,
+}
 
 # spritesheets
 idle_main = pygame.image.load('assets/idle.png').convert_alpha()
 walk_main = pygame.image.load('assets/walk.png').convert_alpha()
-
-class SpriteSheet():
-  def __init__(self, image):
-    self.sheet = image
-  
-def get_image(sheet, frame, width, height, scale, colour):
-  image = pygame.Surface((width, height)).convert()
-  image.blit(sheet, (0, 0), ((frame * width), 0, width, height))
-  image = pygame.transform.scale(image, (width * scale, height * scale))
-  image.set_colorkey(colour)
-  return image
 
 # animation list
 animation_list = []
@@ -57,13 +86,13 @@ temp_img_list = []
 
 # idle animation
 for i in range(13):
-  temp_img_list.append(get_image(idle_main, i, 32, 64, 2, (0, 0, 0)))
+  temp_img_list.append(spritesheet.get_image(idle_main, i, 32, 64, 2, (0, 0, 0)))
 animation_list.append(temp_img_list)
 temp_img_list = []
 
 # walking animation
 for i in range(8):
-  temp_img_list.append(get_image(walk_main, i, 32, 64, 2, (0, 0, 0)))
+  temp_img_list.append(spritesheet.get_image(walk_main, i, 32, 64, 2, (0, 0, 0)))
 animation_list.append(temp_img_list)
 temp_img_list = []
 
@@ -115,7 +144,7 @@ class Player():
         self.on_ground = False
         print(self.dy)
   
-  def move(self, moving_left, moving_right):
+  def move(self):
     screen_scroll = 0
     
     # gravity
@@ -125,7 +154,7 @@ class Player():
     self.rect.x += self.dx
 
     # x collision detection
-    for tile in world.tile_list:
+    for tile in world.obstacle_list:
       if tile[1].colliderect(self.rect):
         if self.dx > 0: # moving right
           self.rect.right = tile[1].left
@@ -136,26 +165,26 @@ class Player():
     self.rect.y -= self.dy
 
     # y collision detection
-    for tile in world.tile_list:
+    for tile in world.obstacle_list:
       if tile[1].colliderect(self.rect):
-        if self.dy < 0: # falling
+        if self.dy < 0: # above ground; falling
           self.rect.bottom = tile[1].top
           self.on_ground = True
           self.dy = 0
-        if self.dy > 0: # jumping
+        if self.dy > 0: # below ground; jumping
           self.rect.top = tile[1].bottom
           self.dy = 0
 
     # update scroll based on player position
     if self.rect.right > screen.get_width() - scroll_threshold or self.rect.left < scroll_threshold:
-      screen_scroll = -self.dx * scroll_mult
+      screen_scroll = -self.dx
       self.rect.x -= self.dx
     
     return screen_scroll
   
   def update(self):
     self.handle_input()
-    self.move(moving_left, moving_right)
+    self.move()
     self.image = pygame.transform.scale(animation_list[action][frame], (64, 128))
     screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
 
@@ -175,10 +204,6 @@ class Message():
     snippet = font1.render(self.message[0:self.counter // self.speed], True, "white") # render the text onto the screen
 
     x_pos = 960 - (snippet.get_width() // 2) # ensures the text is always centered after rerenders
-
-    # black bars
-    pygame.draw.rect(screen, "black", (0, 0, 1920, 120))
-    pygame.draw.rect(screen, "black", (0, 960, 1920, 120))
 
     screen.blit(snippet, (x_pos, 1002.5))
 
@@ -267,78 +292,36 @@ credits_scene = Credits(
 # background
 def draw_bg():
   pygame.draw.rect(screen, "#708090", (0, 120, 1920, 840))
+  pygame.draw.rect(screen, "black", (0, 0, 1920, 120))
+  pygame.draw.rect(screen, "black", (0, 960, 1920, 120))
 
-# grid/map
 class World():
-  def __init__(self, data):
-    self.tile_list = []
-    
-    # load images
-    grass_tl = pygame.image.load('assets/grass_tl.png')
-    grass_tm = pygame.image.load('assets/grass_tm.png')
-    grass_tr = pygame.image.load('assets/grass_tr.png')
-    grass_ml = pygame.image.load('assets/grass_ml.png')
-    grass_m = pygame.image.load('assets/grass_m.png')
-    grass_mr = pygame.image.load('assets/grass_mr.png')
-    grass_bl = pygame.image.load('assets/grass_bl.png')
-    grass_bm = pygame.image.load('assets/grass_bm.png')
-    grass_br = pygame.image.load('assets/grass_br.png')
+  def __init__(self):
+    self.obstacle_list = []
 
-    grass_tiles = {
-      1: grass_tl,
-      2: grass_tm,
-      3: grass_tr,
-      4: grass_ml,
-      5: grass_m,
-      6: grass_mr,
-      7: grass_bl,
-      8: grass_bm,
-      9: grass_br,
-    }
-
-    row_count = 0
-    for row in data:
-      col_count = 0
-      for tile in row:
-        if tile != 0:
+  def process_data(self, data):
+    # iterate through each value in world_data
+    for y, row in enumerate(data):
+      for x, tile in enumerate(row):
+        if tile >= 1:
           img = pygame.transform.scale(grass_tiles[tile], (tile_size, tile_size))
           img_rect = img.get_rect()
-          img_rect.x = col_count * tile_size
-          img_rect.y = row_count * tile_size
-          tile = (img, img_rect)
-          self.tile_list.append(tile)
-        col_count += 1
-      row_count += 1
-    
+          img_rect.x = x * tile_size
+          img_rect.y = y * tile_size
+          tile_data = (img, img_rect)
+          self.obstacle_list.append(tile_data)
+          if tile >= 1 and tile <= 9:
+            self.obstacle_list.append(tile_data)
+            
   def draw(self):
-    for tile in self.tile_list:
+    for tile in self.obstacle_list:
       tile[1][0] += screen_scroll
       screen.blit(tile[0], tile[1])
 
-world_data = [
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 1
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 2
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 3
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 4
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 0
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 6
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 7
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 8
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 9
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 10
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 11
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 12
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 13
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 14
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 10
-  [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], # 16
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 17
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # 18
-]
-
 # create instances
 player = Player(500, screen_height - 320)
-world = World(world_data)
+world = World()
+world.process_data(world_data)
 
 # game loop
 run = True
@@ -350,8 +333,9 @@ while run:
     if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
       run = False
     
-    # initial left/right press (animation control)
+    # keypresses
     if event.type == pygame.KEYDOWN:
+      # initial left/right press (animation control)
       if event.key == pygame.K_a:
         moving_left = True
         action = 1
@@ -360,6 +344,8 @@ while run:
         moving_right = True
         action = 1
         frame = 0
+      
+      # dialogue and credits
       if event.key == pygame.K_e:
         if current_message_index < len(messages) and messages[current_message_index].complete:
           current_message_index += 1
@@ -382,7 +368,7 @@ while run:
   draw_bg()
   world.draw()
   player.update()
-  screen_scroll = player.move(moving_left, moving_right)
+  screen_scroll = player.move()
 
   # update animation
   current_time = pygame.time.get_ticks()
