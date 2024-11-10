@@ -2,6 +2,7 @@
 import pygame
 import csv
 import math
+import pygame_shaders
 
 import button
 import spritesheet
@@ -15,8 +16,12 @@ fps = 60
 screen_width = 1920
 screen_height = 1080
 
-screen = pygame.display.set_mode((1920, 1080))
+screen_gl = pygame.display.set_mode((1920, 1080), pygame.OPENGL)
+screen = pygame.Surface((1920, 1080))
+screen.set_colorkey((0, 0, 0))
 pygame.display.set_caption('CAPSTONE GAME (change later)')
+
+screen_shader = pygame_shaders.Shader((1920, 1080), (1920, 1080), (0, 0), "shaders/vertex.glsl", "shaders/fragment.glsl", screen)
 
 screen.fill('white')
 
@@ -62,13 +67,15 @@ screen_scroll = 0
 scroll_mult = 2 # possibly change later (if scrolling makes the player slightly faster or slower, movement could be an issue)2
 bg_scroll = 0
 
+time = 0
+
 start_game = False
 
 # closing black bars (transition)
 bar_height = screen_height // 2
 
 # level variables
-rows = 18
+rows = 24
 cols = 100
 tile_size = screen.get_height() // rows
 level = 0
@@ -96,36 +103,35 @@ title_img_temp = pygame.image.load('assets/title.png').convert_alpha()
 title_img = pygame.transform.scale_by(title_img_temp, 2)
 
 # tilesets
-grass_tl = pygame.image.load('assets/grass_tl.png').convert_alpha()
-grass_tm = pygame.image.load('assets/grass_tm.png').convert_alpha()
-grass_tm2 = pygame.image.load('assets/grass_tm2.png').convert_alpha()
-grass_tm3 = pygame.image.load('assets/grass_tm3.png').convert_alpha()
-grass_tr = pygame.image.load('assets/grass_tr.png').convert_alpha()
-grass_ml = pygame.image.load('assets/grass_ml.png').convert_alpha()
-grass_m = pygame.image.load('assets/grass_m.png').convert_alpha()
-grass_mr = pygame.image.load('assets/grass_mr.png').convert_alpha()
-grass_bl = pygame.image.load('assets/grass_bl.png').convert_alpha()
-grass_bm = pygame.image.load('assets/grass_bm.png').convert_alpha()
-grass_br = pygame.image.load('assets/grass_br.png').convert_alpha()
+grass_tiles_assets = {
+  "grass_tl": pygame.image.load('assets/grass_tl.png').convert_alpha(),
+  "grass_tm": pygame.image.load('assets/grass_tm.png').convert_alpha(),
+  "grass_tm2": pygame.image.load('assets/grass_tm2.png').convert_alpha(),
+  "grass_tm3": pygame.image.load('assets/grass_tm3.png').convert_alpha(),
+  "grass_tr": pygame.image.load('assets/grass_tr.png').convert_alpha(),
+  "grass_ml": pygame.image.load('assets/grass_ml.png').convert_alpha(),
+  "grass_m": pygame.image.load('assets/grass_m.png').convert_alpha(),
+  "grass_mr": pygame.image.load('assets/grass_mr.png').convert_alpha(),
+  "grass_bl": pygame.image.load('assets/grass_bl.png').convert_alpha(),
+  "grass_bm": pygame.image.load('assets/grass_bm.png').convert_alpha(),
+  "grass_br": pygame.image.load('assets/grass_br.png').convert_alpha(),
+  "grass_float1": pygame.image.load('assets/grass_float1.png').convert_alpha(),
+  "grass_float2": pygame.image.load('assets/grass_float2.png').convert_alpha(),
+  "grass_float3": pygame.image.load('assets/grass_float3.png').convert_alpha(),
+}
+
+grass_tiles = {}
+
+asset_index = 1
+for asset in grass_tiles_assets:
+  grass_tiles.update({asset_index: grass_tiles_assets.get(asset)})
+  asset_index += 1
 
 # collectibles
 golden_leaf_img = pygame.image.load('assets/golden_leaf.png').convert_alpha()
+
 collectibles = {
   'golden_leaf': golden_leaf_img,
-}
-
-grass_tiles = {
-  1: grass_tl,
-  2: grass_tm,
-  3: grass_tm2,
-  4: grass_tm3,
-  5: grass_tr,
-  6: grass_ml,
-  7: grass_m,
-  8: grass_mr,
-  9: grass_bl,
-  10: grass_bm,
-  11: grass_br,
 }
 
 # spritesheets
@@ -169,9 +175,9 @@ moving_right = False
 # player
 class Player():
   def __init__(self, x, y):
-    img = pygame.image.load('assets/idle.png')
-    self.image = pygame.transform.scale(animation_list[0][0], (60, 120))
+    self.image = pygame.transform.scale(animation_list[0][0], (48, 96))
     self.rect = self.image.get_rect()
+    self.rect.height -= 14
     self.rect.x = x
     self.rect.y = y
     self.width = self.image.get_width()
@@ -207,7 +213,7 @@ class Player():
     # up pressed
     if keys[pygame.K_w]:
       if self.on_ground:
-        self.dy = 10
+        self.dy = 8
         print(self.dy)
     
     # # if the player pressed shift without moving
@@ -257,7 +263,7 @@ class Player():
   def update(self):
     self.handle_input()
     self.move()
-    self.image = pygame.transform.scale(animation_list[action][frame], (64, 128))
+    self.image = pygame.transform.scale(animation_list[action][frame], (48, 96))
     screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
 
 class Collectible(pygame.sprite.Sprite):
@@ -308,7 +314,7 @@ class Message():
 
     x_pos = 960 - (snippet.get_width() // 2) # ensures the text is always centered after rerenders
 
-    screen.blit(snippet, (x_pos, 1002.5))
+    screen.blit(snippet, (x_pos, 995))
 
 messages = [
   Message("I don't know if I can carry on much longer.", speed=2),
@@ -403,8 +409,8 @@ def draw_bg():
 
 # black bars
 def draw_black_bars():
-  pygame.draw.rect(screen, "black", (0, 0, 1920, 120))
-  pygame.draw.rect(screen, "black", (0, 960, 1920, 120))
+  pygame.draw.rect(screen, "black", (0, 0, 1920, 135))
+  pygame.draw.rect(screen, "black", (0, 945, 1920, 135))
 
 class World():
   def __init__(self):
@@ -421,7 +427,7 @@ class World():
           img_rect.y = y * tile_size
           tile_data = (img, img_rect)
           self.obstacle_list.append(tile_data)
-          if tile >= 1 and tile <= 11:
+          if tile >= 1 and tile <= 14:
             self.obstacle_list.append(tile_data)
             
   def draw(self):
@@ -441,8 +447,8 @@ world.process_data(world_data)
 # game loop
 run = True
 while run:
-
-  clock.tick(fps)
+  pygame_shaders.clear((0, 0, 0))
+  screen.fill((0, 0, 0))
 
   if start_game == False:
     screen.fill('black')
@@ -463,7 +469,7 @@ while run:
 
     # update animation
     if action != 2:
-      animation_cooldown = 150
+      animation_cooldown = 125
     else:
       animation_cooldown = 50
     
@@ -478,7 +484,7 @@ while run:
     print(player.dy)
 
     # messages render
-    if current_message_index < len(messages):
+    if current_message_index < len(messages) and start_game == True:
       messages[current_message_index].draw()
     else:
       ellipse.draw()
@@ -547,6 +553,14 @@ while run:
     pygame.draw.rect(screen, 'black', (0, 0, screen_width, bar_height))
     pygame.draw.rect(screen, 'black', (0, screen_height - bar_height, screen_width, bar_height))
 
+  time += 0.05
+  if start_game == False:
+    screen_shader.send("time", [time])
+  else:
+    screen_shader.send("time", [1])
+  screen_shader.render(screen)
+
   pygame.display.flip()
+  clock.tick(fps)
 
 pygame.quit()

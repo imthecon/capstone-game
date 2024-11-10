@@ -25,12 +25,11 @@ font2 = pygame.font.Font("fonts/Silkscreen-Regular.ttf", 36)
 font3 = pygame.font.Font("fonts/Silkscreen-Regular.ttf", 48)
 font4 = pygame.font.Font("fonts/Silkscreen-Regular.ttf", 72)
 
-# define game variables
-tile_size = 60 # 16:9 tile ratio
-
 # level editor variables
-rows = 18
+rows = 24
 max_cols = 100
+
+tile_size = screen.get_height() // rows
 
 level = 0
 
@@ -51,38 +50,38 @@ for row in range(rows):
 
 # create ground
 for tile in range(0, max_cols):
-  world_data[rows - 3][tile] = 2
+  world_data[rows - 4][tile] = 2
 
 def draw_text(text, font, text_col, x, y):
   img = font.render(text, True, text_col)
   screen.blit(img, (x, y))
 
 # load assets
-grass_tl = pygame.image.load('assets/grass_tl.png').convert_alpha()
-grass_tm = pygame.image.load('assets/grass_tm.png').convert_alpha()
-grass_tm2 = pygame.image.load('assets/grass_tm2.png').convert_alpha()
-grass_tm3 = pygame.image.load('assets/grass_tm3.png').convert_alpha()
-grass_tr = pygame.image.load('assets/grass_tr.png').convert_alpha()
-grass_ml = pygame.image.load('assets/grass_ml.png').convert_alpha()
-grass_m = pygame.image.load('assets/grass_m.png').convert_alpha()
-grass_mr = pygame.image.load('assets/grass_mr.png').convert_alpha()
-grass_bl = pygame.image.load('assets/grass_bl.png').convert_alpha()
-grass_bm = pygame.image.load('assets/grass_bm.png').convert_alpha()
-grass_br = pygame.image.load('assets/grass_br.png').convert_alpha()
-
-grass_tiles = {
-  1: grass_tl,
-  2: grass_tm,
-  3: grass_tm2,
-  4: grass_tm3,
-  5: grass_tr,
-  6: grass_ml,
-  7: grass_m,
-  8: grass_mr,
-  9: grass_bl,
-  10: grass_bm,
-  11: grass_br,
+grass_tiles_assets = {
+  "grass_tl": pygame.image.load('assets/grass_tl.png').convert_alpha(),
+  "grass_tm": pygame.image.load('assets/grass_tm.png').convert_alpha(),
+  "grass_tm2": pygame.image.load('assets/grass_tm2.png').convert_alpha(),
+  "grass_tm3": pygame.image.load('assets/grass_tm3.png').convert_alpha(),
+  "grass_tr": pygame.image.load('assets/grass_tr.png').convert_alpha(),
+  "grass_ml": pygame.image.load('assets/grass_ml.png').convert_alpha(),
+  "grass_m": pygame.image.load('assets/grass_m.png').convert_alpha(),
+  "grass_mr": pygame.image.load('assets/grass_mr.png').convert_alpha(),
+  "grass_bl": pygame.image.load('assets/grass_bl.png').convert_alpha(),
+  "grass_bm": pygame.image.load('assets/grass_bm.png').convert_alpha(),
+  "grass_br": pygame.image.load('assets/grass_br.png').convert_alpha(),
+  "grass_float1": pygame.image.load('assets/grass_float1.png').convert_alpha(),
+  "grass_float2": pygame.image.load('assets/grass_float2.png').convert_alpha(),
+  "grass_float3": pygame.image.load('assets/grass_float3.png').convert_alpha(),
 }
+
+grass_tiles = {}
+
+asset_index = 1
+for asset in grass_tiles_assets:
+  grass_tiles.update({asset_index: grass_tiles_assets.get(asset)})
+  asset_index += 1
+
+print(grass_tiles)
 
 # level editor grid
 def draw_grid():
@@ -120,7 +119,7 @@ def draw_bg():
 def draw_world():
   for y, row in enumerate(world_data):
     for x, tile in enumerate(row):
-      if tile >= 1 and tile <= 11:
+      if tile >= 1 and tile <= 14:
         img = pygame.transform.scale(grass_tiles[tile], (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size))
 
@@ -158,7 +157,7 @@ while run:
   
   # draw tile panel
   pygame.draw.rect(screen, "#7393B3", (screen.get_width() - 300, 0, side_margin, screen.get_height()))
-  pygame.draw.rect(screen, "#7393B3", (0, screen.get_height() - 120, screen.get_width(), 120))
+  pygame.draw.rect(screen, "#7393B3", (0, screen.get_height() - 135, screen.get_width(), 135))
 
   # save and load data
   if save_button.draw(screen):
@@ -211,7 +210,7 @@ while run:
   y = pos[1] // tile_size
 
   # check that the coordinates are within the tile area
-  if pos[0] < screen.get_width() - 300 and pos[1] < screen.get_height():
+  if pos[0] < screen.get_width() - 300 and pos[1] < screen.get_height() - 135:
     # update tile value
     if pygame.mouse.get_pressed()[0] == 1:
       if world_data[y][x] != current_tile + 1:
