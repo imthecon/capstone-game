@@ -2,7 +2,7 @@
 import pygame
 import button
 import csv
-import pickle
+import json
 
 # initialization
 pygame.init()
@@ -26,7 +26,7 @@ font3 = pygame.font.Font("fonts/Silkscreen-Regular.ttf", 48)
 font4 = pygame.font.Font("fonts/Silkscreen-Regular.ttf", 72)
 
 # level editor variables
-rows = 24
+rows = 18
 max_cols = 100
 
 tile_size = screen.get_height() // rows
@@ -40,6 +40,9 @@ scroll_right = False
 scroll = 0
 scroll_speed = 2
 
+sign_id = 0
+sign_list = []
+
 # empty world data list
 world_data = []
 
@@ -51,6 +54,11 @@ for row in range(rows):
 # create ground
 for tile in range(0, max_cols):
   world_data[rows - 4][tile] = 2
+
+for tile in range(0, max_cols):
+  world_data[rows - 3][tile] = 7
+  world_data[rows - 2][tile] = 7
+  world_data[rows - 1][tile] = 7
 
 def draw_text(text, font, text_col, x, y):
   img = font.render(text, True, text_col)
@@ -74,14 +82,28 @@ grass_tiles_assets = {
   "grass_float3": pygame.image.load('assets/grass_float3.png').convert_alpha(),
 }
 
+misc_assets = {
+  "sign": pygame.image.load('assets/sign.png').convert_alpha(),
+  "flag": pygame.image.load('assets/flag.png').convert_alpha(),
+}
+
 grass_tiles = {}
+
+misc_tiles = {}
 
 asset_index = 1
 for asset in grass_tiles_assets:
   grass_tiles.update({asset_index: grass_tiles_assets.get(asset)})
   asset_index += 1
 
-print(grass_tiles)
+for asset in misc_assets:
+  misc_tiles.update({asset_index: misc_assets.get(asset)})
+  asset_index += 1
+
+# assets = {'grass_tiles': grass_tiles, 'misc_tiles': misc_tiles}
+
+# with open('assets.json', 'w') as file:
+#   json.dump(assets, file)
 
 # level editor grid
 def draw_grid():
@@ -97,15 +119,23 @@ def draw_grid():
 save_img = pygame.image.load('assets/save.png').convert_alpha()
 load_img = pygame.image.load('assets/load.png').convert_alpha()
 
-save_button = button.Button(screen.get_width() // 2 - 100, screen.get_height() - 100, save_img, 2)
-load_button = button.Button(screen.get_width() // 2, screen.get_height() - 100, load_img, 2)
+save_button = button.Button(screen.get_width() - 225, screen.get_height() - 100, save_img, 2)
+load_button = button.Button(screen.get_width() - 125, screen.get_height() - 100, load_img, 2)
 
 # make a button list
 button_list = []
 button_col = 0
 button_row = 0
 for i in range(len(grass_tiles)):
-  tile_button = button.Button(screen.get_width() - 300 + (75 * button_col) + 50, 75 * button_row + 50, grass_tiles[i + 1], 1)
+  tile_button = button.Button(screen.get_width() - 300 + (75 * button_col) + 50, 75 * button_row + 50, grass_tiles.get(i + 1), 1)
+  button_list.append(tile_button)
+  button_col += 1
+  if button_col == 3:
+    button_row += 1
+    button_col = 0
+
+for i in range(len(grass_tiles), len(grass_tiles) + len(misc_tiles)):
+  tile_button = button.Button(screen.get_width() - 300 + (75 * button_col) + 50, 75 * button_row + 50, misc_tiles.get(i + 1), 1)
   button_list.append(tile_button)
   button_col += 1
   if button_col == 3:
@@ -120,8 +150,11 @@ def draw_world():
   for y, row in enumerate(world_data):
     for x, tile in enumerate(row):
       if tile >= 1 and tile <= 14:
-        img = pygame.transform.scale(grass_tiles[tile], (tile_size, tile_size))
+        img = pygame.transform.scale(grass_tiles.get(tile), (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size))
+      if tile >= 15:
+        img = pygame.transform.scale(misc_tiles.get(tile), (tile_size, tile_size))
+        screen.blit(img, (x * tile_size - scroll, y * tile_size + 10))
 
 # game loop
 run = True
@@ -157,7 +190,7 @@ while run:
   
   # draw tile panel
   pygame.draw.rect(screen, "#7393B3", (screen.get_width() - 300, 0, side_margin, screen.get_height()))
-  pygame.draw.rect(screen, "#7393B3", (0, screen.get_height() - 135, screen.get_width(), 135))
+  # pygame.draw.rect(screen, "#7393B3", (0, screen.get_height() - 135, screen.get_width(), 135))
 
   # save and load data
   if save_button.draw(screen):
@@ -210,11 +243,13 @@ while run:
   y = pos[1] // tile_size
 
   # check that the coordinates are within the tile area
-  if pos[0] < screen.get_width() - 300 and pos[1] < screen.get_height() - 135:
+  if pos[0] < screen.get_width() - 300:
     # update tile value
     if pygame.mouse.get_pressed()[0] == 1:
       if world_data[y][x] != current_tile + 1:
         world_data[y][x] = current_tile + 1
+        if current_tile == 14: # sign id
+          pass # figure out a way to tackle this
     if pygame.mouse.get_pressed()[2] == 1:
       world_data[y][x] = 0
 

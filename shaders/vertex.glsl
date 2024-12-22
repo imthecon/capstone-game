@@ -1,12 +1,14 @@
 #version 330 core
 
-layout (location=0) in vec3 vertexPos;
-layout (location=1) in vec2 vertexTexCoord;
+layout (location = 0) in vec2 aPos;
 
-out vec2 fragmentTexCoord;
+out vec2 fragPos;
+
+uniform mat4 projection;
+uniform vec2 cameraPos;
 
 void main()
 {
-  gl_Position = vec4(vertexPos, 1.0);
-  fragmentTexCoord = vertexTexCoord;
+  fragPos = aPos - cameraPos;
+  gl_Position = projection * vec4(aPos, 0.0, 1.0);
 }
