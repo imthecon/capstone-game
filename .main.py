@@ -39,6 +39,7 @@ sfx = {
   'change_mood': mixer.Sound('sounds/change_mood.wav'),
   'start': mixer.Sound('sounds/start.wav'),
   '1up':mixer.Sound('sounds/1up.wav'),
+  'pickup':mixer.Sound('sounds/pickup.wav'),
 }
 
 for key, sound in sfx.items():
@@ -130,7 +131,7 @@ def surf_to_texture(surf):
 scroll_threshold = 1000
 screen_scroll = 0
 scroll_mult = 2 # possibly change later (if scrolling makes the player slightly faster or slower, movement could be an issue)
-bg_scroll = 0
+bg_scroll = 1000
 
 sign_audio_played = False
 oneup_played = False
@@ -143,6 +144,14 @@ switch_cooldown = 250
 golden_leaf_collected = 0
 
 reset_level = False
+new_level_pause = False
+
+level_messages = [
+  "If you're reading this, hi!",
+  "If you're reading this, hi!",
+]
+
+num_previous_signs = 0
 
 # closing black bars (transition)
 bar_height = screen_height // 2
@@ -233,8 +242,16 @@ collectibles = {
 # spritesheets
 idle_main = pygame.image.load('assets/idle.png').convert_alpha()
 walk_main = pygame.image.load('assets/walk.png').convert_alpha()
-run_main = pygame.image.load('assets/run.png').convert_alpha()
 jump_main = pygame.image.load('assets/jump.png').convert_alpha()
+
+idle_purple = pygame.image.load('assets/idle_purple.png').convert_alpha()
+walk_purple = pygame.image.load('assets/walk_purple.png').convert_alpha()
+
+idle_grey = pygame.image.load('assets/idle_grey.png').convert_alpha()
+walk_grey = pygame.image.load('assets/walk_grey.png').convert_alpha()
+
+idle_yellow = pygame.image.load('assets/idle_yellow.png').convert_alpha()
+walk_yellow = pygame.image.load('assets/walk_yellow.png').convert_alpha()
 
 # animation list
 animation_list = []
@@ -257,17 +274,52 @@ for i in range(13):
 animation_list.append(temp_img_list)
 temp_img_list = []
 
-# # walking animation
-# for i in range(4):
-#   temp_img_list.append(spritesheet.get_image(run_main, i, 32, 64, 2, (0, 0, 0)))
-# animation_list.append(temp_img_list)
-# temp_img_list = []
-
-# walking animation
+# jumping animation
 for i in range(4):
   temp_img_list.append(spritesheet.get_image(jump_main, i, 32, 64, 2, (0, 0, 0)))
 animation_list.append(temp_img_list)
 temp_img_list = []
+
+
+# idle animation
+for i in range(13):
+  temp_img_list.append(spritesheet.get_image(idle_purple, i, 32, 64, 2, (0, 0, 0)))
+animation_list.append(temp_img_list)
+temp_img_list = []
+
+# walking animation
+for i in range(4):
+  temp_img_list.append(spritesheet.get_image(walk_purple, i, 32, 64, 2, (0, 0, 0)))
+animation_list.append(temp_img_list)
+temp_img_list = []
+
+
+# idle animation
+for i in range(13):
+  temp_img_list.append(spritesheet.get_image(idle_grey, i, 32, 64, 2, (0, 0, 0)))
+animation_list.append(temp_img_list)
+temp_img_list = []
+
+# walking animation
+for i in range(4):
+  temp_img_list.append(spritesheet.get_image(walk_grey, i, 32, 64, 2, (0, 0, 0)))
+animation_list.append(temp_img_list)
+temp_img_list = []
+
+
+# idle animation
+for i in range(13):
+  temp_img_list.append(spritesheet.get_image(idle_yellow, i, 32, 64, 2, (0, 0, 0)))
+animation_list.append(temp_img_list)
+temp_img_list = []
+
+# walking animation
+for i in range(4):
+  temp_img_list.append(spritesheet.get_image(walk_yellow, i, 32, 64, 2, (0, 0, 0)))
+animation_list.append(temp_img_list)
+temp_img_list = []
+
+temp_anim_array = animation_list.copy()
 
 # player action variables
 moving_left = False
@@ -286,8 +338,8 @@ def outline(img, loc, alpha):
 # player
 class Player():
   def __init__(self, x, y):
-    self.pixel_w = 64
-    self.pixel_h = 128
+    self.pixel_w = 60
+    self.pixel_h = 120
     self.image = pygame.transform.scale(animation_list[0][0], (self.pixel_w, self.pixel_h))
     self.rect = pygame.Rect(x, y, self.image.get_width(), self.image.get_height())
     self.rect.height -= 14
@@ -331,7 +383,7 @@ class Player():
       self.dx = 0
     
     # if player presses space while on the ground, set jumping to true and reset jump variables
-    if keys[pygame.K_SPACE] and self.on_ground:
+    if keys[pygame.K_SPACE] and self.on_ground and self.mood == 1:
       sfx['jump'].play()
       self.jumping = True
       self.jump_timer = 0
@@ -346,7 +398,6 @@ class Player():
         self.dy = 5 + 2 * (self.jump_timer / self.max_jump_time)
       else:
         self.jumping = False
-    print(action)
 
     # set jumping to false when space bar is not being pressed
     if not keys[pygame.K_SPACE]:
@@ -457,6 +508,7 @@ class Collectible(pygame.sprite.Sprite):
     if pygame.sprite.collide_rect(self, player):
       # check what type of collectible it was
       if self.item_type == 'golden_leaf':
+        sfx['pickup'].play()
         trigger_transition = True
         golden_leaf_collected += 1
       # delete the collectible
@@ -517,7 +569,6 @@ messages = [
   Message("6", speed=2),
 ]
 ellipse = Message("...", speed=2)
-current_message_index = 0
 
 class Credits():
   def __init__(self, speed, credits):
@@ -600,18 +651,18 @@ def draw_text(text, font, text_col, x, y):
   screen.blit(img, (x, y))
 
 # background
-bg_layer1_main_base = pygame.image.load('assets/bg_layer1_main.png').convert_alpha()
-bg_layer1_main = pygame.transform.scale_by(bg_layer1_main_base, 6)
+bg_layer1_main_base = pygame.image.load('assets/tree1.png').convert_alpha()
+bg_layer1_main = pygame.transform.scale_by(bg_layer1_main_base, 4.9)
 
-bg_layer2_main_base = pygame.image.load('assets/bg_layer2_main.png').convert_alpha()
-bg_layer2_main = pygame.transform.scale_by(bg_layer2_main_base, 6)
+bg_layer2_main_base = pygame.image.load('assets/tree2.png').convert_alpha()
+bg_layer2_main = pygame.transform.scale_by(bg_layer2_main_base, 4.9)
 
-bg_layer3_main_base = pygame.image.load('assets/bg_layer3_main.png').convert_alpha()
-bg_layer3_main = pygame.transform.scale_by(bg_layer3_main_base, 6)
+bg_layer3_main_base = pygame.image.load('assets/tree3.png').convert_alpha()
+bg_layer3_main = pygame.transform.scale_by(bg_layer3_main_base, 4.9)
 
 
 def draw_bg():
-  screen.fill('white')
+  # screen.fill('white')
   width = bg_layer1_main.get_width()
   for i in range(10):
     screen.blit(bg_layer1_main, (((i * width)) - bg_scroll * 0.5, 0))
@@ -644,14 +695,14 @@ class World():
         if tile >= 1 and tile <= 14:
           img = pygame.transform.scale(grass_tiles.get(tile), (tile_size, tile_size))
           img_rect = img.get_rect()
-          img_rect.x = x * tile_size
+          img_rect.x = x * tile_size - (tile_size * 10)
           img_rect.y = y * tile_size
           tile_data = (img, img_rect, tile)
           self.obstacle_list.append(tile_data)
         elif tile >= 15:
           img = pygame.transform.scale(misc_tiles.get(tile), (tile_size, tile_size))
           img_rect = img.get_rect()
-          img_rect.x = x * tile_size
+          img_rect.x = x * tile_size - (tile_size * 10)
           img_rect.y = y * tile_size + 10
           tile_data = (img, img_rect, tile)
           self.non_obstacle_list.append(tile_data)
@@ -720,9 +771,11 @@ while run:
 
         screen.blit(mark, (x_pos, y_pos + amplitude * math.sin(2 * math.pi * frequency * time)))
         
-        messages[sign[3]].draw()
+        messages[num_previous_signs + sign[3]].draw()
       else:
         sign_audio_played = False
+
+    print(num_previous_signs)
 
     # player update
     player.update()
@@ -742,6 +795,7 @@ while run:
       outline(sadness_icon, (50, 300), 255)
       sadness_icon.set_alpha(255)
       draw_text('[1] Sadness', font2, 'white', 140, 305)
+
     else:
       outline(sadness_icon, (50, 300), 50)
       sadness_icon.set_alpha(50)
@@ -757,7 +811,26 @@ while run:
       fear_icon.set_alpha(50)
       draw_text('[2] Fear', font1, 'white', 140, 405)
     screen.blit(fear_icon, (50, 390))
+    
+    if player.mood == 3: # anxiety
+      outline(fear_icon, (50, 480), 255)
+      fear_icon.set_alpha(255)
+      draw_text('[3] Anxiety', font2, 'white', 140, 485)
+    else:
+      outline(fear_icon, (50, 480), 50)
+      fear_icon.set_alpha(50)
+      draw_text('[3] Anxiety', font1, 'white', 140, 495)
+    screen.blit(fear_icon, (50, 480))
 
+    if player.mood == 4: # happiness
+      outline(fear_icon, (50, 570), 255)
+      fear_icon.set_alpha(255)
+      draw_text('[4] Happiness', font2, 'white', 140, 575)
+    else:
+      outline(fear_icon, (50, 570), 50)
+      fear_icon.set_alpha(50)
+      draw_text('[4] Happiness', font1, 'white', 140, 585)
+    screen.blit(fear_icon, (50, 570))
 
     # update and draw groups
     for collectible in collectible_group:
@@ -814,7 +887,7 @@ while run:
       run = False
 
     if event.type == pygame.KEYDOWN:
-      if event.key == pygame.K_t:
+      if event.key == pygame.K_t and not start_game:
         start_game = True
         sfx['start'].play()
       
@@ -832,29 +905,67 @@ while run:
             action = 1
 
         # dialogue and credits
-        if event.key == pygame.K_e:
-          if current_message_index < len(messages) and messages[current_message_index].complete:
-            current_message_index += 1
-        if event.key == pygame.K_z:
-          credits_scene.running = True
-        
+        # if event.key == pygame.K_e:
+        #   if current_message_index < len(messages) and messages[current_message_index].complete:
+        #     current_message_index += 1
+        # if event.key == pygame.K_z:
+        #   credits_scene.running = True
+
         # emotion changing
-        if switch_cooldown == 250:
-          if event.key == pygame.K_1 and player.mood != 1: # sadness
+        if switch_cooldown == 250 or new_level_pause:
+          if (event.key == pygame.K_1 and player.mood != 1) or new_level_pause: # sadness
             player.mood = 1
             screen_shake = 30
             sfx['change_mood'].play()
             switch_cooldown = 0
-          if event.key == pygame.K_2 and player.mood != 2: # fear
+
+            # character swaps
+            animation_list[0] = temp_anim_array[0]
+            animation_list[1] = temp_anim_array[1]
+            frame = 0
+
+          if event.key == pygame.K_2 and player.mood != 2 and not keys[pygame.K_SPACE]: # fear
             player.mood = 2
             screen_shake = 30
             sfx['change_mood'].play()
             switch_cooldown = 0
-          if event.key == pygame.K_3: # ...
+
+            # scaled_screen = pygame.transform.scale_by(screen, 0.9)
+            # offset_x = (scaled_screen.get_width() - screen.get_width()) // 2
+            # offset_y = (scaled_screen.get_height() - screen.get_height()) // 2
+
+            # character swaps
+            animation_list[0] = temp_anim_array[3]
+            animation_list[1] = temp_anim_array[4]
+            frame = 0
+
+          if event.key == pygame.K_3 and player.mood != 3 and not keys[pygame.K_SPACE]: # anxiety
             player.mood = 3
-          if event.key == pygame.K_4: # joy/happiness?
+            screen_shake = 30
+            sfx['change_mood'].play()
+            switch_cooldown = 0
+
+            # character swaps
+            animation_list[0] = temp_anim_array[5]
+            animation_list[1] = temp_anim_array[6]
+            frame = 0
+
+          
+          if event.key == pygame.K_4 and player.mood != 4 and not keys[pygame.K_SPACE]: # happiness
             player.mood = 4
-    
+            screen_shake = 30
+            sfx['change_mood'].play()
+            switch_cooldown = 0
+
+            # character swaps
+            animation_list[0] = temp_anim_array[7]
+            animation_list[1] = temp_anim_array[8]
+            frame = 0
+        
+        # "curtain" opening for a new level
+        if bar_height > 0 and event.key == pygame.K_e:
+          new_level_pause = False
+
     if start_game == True:
       if event.type == pygame.KEYUP:
         if event.key == pygame.K_a:
@@ -894,12 +1005,29 @@ while run:
   #     player.pixel_h += 8
   #   print(player.rect.w, player.rect.h, player.pixel_w, player.pixel_h)
 
-  # "curtain" opening for the game
-  if bar_height >= 10 and start_game == True and not reset_level:
-    bar_height -= 10
+  # "curtain" opening for the game / level reset
+  if start_game == True:
+    if bar_height >= 10 and not new_level_pause:
+      bar_height -= 10
     pygame.draw.rect(screen, 'black', (0, 0, screen_width, bar_height))
     pygame.draw.rect(screen, 'black', (0, screen_height - bar_height, screen_width, bar_height))
+    if new_level_pause:
+      new_level_text = font1.render(level_messages[level - 1], True, "white")
+      new_level_text_rect = new_level_text.get_rect()
+      new_level_text_rect.center = (screen.get_width() // 2, screen.get_height() // 2)
+      screen.blit(new_level_text, new_level_text_rect)
+
+      next_text = font2.render("Press [E] to continue.", True, "white")
+      next_text_rect = next_text.get_rect()
+      next_text_rect.center = (screen.get_width() // 2, 1000)
+      screen.blit(next_text, next_text_rect)
   
+  # if bar_height >= 10 and new_level_pause:
+  #   bar_height -= 10
+
+  # if bar_height == 0:
+  #   new_level_pause = False
+
   # level switch bar close and open
   if reset_level:
     # play 1up sound effect
@@ -907,47 +1035,48 @@ while run:
       sfx['1up'].play()
       oneup_played = True
 
-    if bar_height <= 640:
-      bar_height += 10
-    else:
-      # empty current world data
-      with open(f'level{level}_data.csv', newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter=",")
-        for x, row in enumerate(reader):
-          for y, tile in enumerate(row):
-            world_data[x][y] = 0
-      
-      # create new world and player instance
-      player = Player(960, screen_height - 400)
-      world = World()
-      world.process_data(world_data)
+    bar_height = 640
 
-      # empty world data list
-      world_data = []
+    # add number of signs to list (before changing world)
+    for sign in world.sign_list:
+      num_previous_signs += 1
 
-      # create empty tile list
-      for row in range(rows):
-        r = [0] * cols
-        world_data.append(r)
+    # empty current world data
+    with open(f'level{level}_data.csv', newline='') as csvfile:
+      reader = csv.reader(csvfile, delimiter=",")
+      for x, row in enumerate(reader):
+        for y, tile in enumerate(row):
+          world_data[x][y] = 0
+    
+    # create new world and player instance
+    player = Player(960, screen_height - 400)
+    world = World()
+    world.process_data(world_data)
 
-      # change level
-      level += 1
+    # empty world data list
+    world_data = []
 
-      # load in new level data and create world
-      with open(f'level{level}_data.csv', newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter=",")
-        for x, row in enumerate(reader):
-          for y, tile in enumerate(row):
-            world_data[x][y] = int(tile)
-      
-      world.process_data(world_data)
+    # create empty tile list
+    for row in range(rows):
+      r = [0] * cols
+      world_data.append(r)
+    
+    # change level
+    level += 1
 
-      oneup_played = True
+    # load in new level data and create world
+    with open(f'level{level}_data.csv', newline='') as csvfile:
+      reader = csv.reader(csvfile, delimiter=",")
+      for x, row in enumerate(reader):
+        for y, tile in enumerate(row):
+          world_data[x][y] = int(tile)
+    
+    world.process_data(world_data)
 
-      reset_level = False
+    oneup_played = True
 
-    pygame.draw.rect(screen, 'black', (0, 0, screen_width, bar_height))
-    pygame.draw.rect(screen, 'black', (0, screen_height - bar_height, screen_width, bar_height))
+    new_level_pause = True
+    reset_level = False
 
   # time += 0.05
   # if start_game == False:
@@ -964,13 +1093,21 @@ while run:
     program['g_value'] = 1
     program['b_value'] = 1
   elif player.mood == 1:
-    program['r_value'] = 0.5
-    program['g_value'] = 0.5
-    program['b_value'] = 0.6
+    program['r_value'] = 0.7
+    program['g_value'] = 0.7
+    program['b_value'] = 0.8
   elif player.mood == 2:
     program['r_value'] = 0.8
-    program['g_value'] = 0.8
-    program['b_value'] = 0.9
+    program['g_value'] = 0.4
+    program['b_value'] = 0.3
+  elif player.mood == 3:
+    program['r_value'] = 0.5
+    program['g_value'] = 0.5
+    program['b_value'] = 0.4
+  elif player.mood == 4:
+    program['r_value'] = 1
+    program['g_value'] = 1
+    program['b_value'] = 1
 
   render_object.render(mode=moderngl.TRIANGLE_STRIP)
 

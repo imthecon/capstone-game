@@ -108,7 +108,7 @@ for asset in misc_assets:
 # level editor grid
 def draw_grid():
   # vertical lines
-  for c in range(max_cols + 1):
+  for c in range(max_cols + 10):
     pygame.draw.line(screen, "white", (c * tile_size - scroll, 0), (c * tile_size - scroll, screen.get_height()))
   
   # horizontal lines
@@ -231,7 +231,7 @@ while run:
   pygame.draw.rect(screen, "red", button_list[current_tile].rect, 3)
 
   # scroll
-  if scroll_left == True and scroll > 0:
+  if scroll_left == True:
     scroll -= 5 * scroll_speed
   if scroll_right == True:
     scroll += 5 * scroll_speed
@@ -248,8 +248,6 @@ while run:
     if pygame.mouse.get_pressed()[0] == 1:
       if world_data[y][x] != current_tile + 1:
         world_data[y][x] = current_tile + 1
-        if current_tile == 14: # sign id
-          pass # figure out a way to tackle this
     if pygame.mouse.get_pressed()[2] == 1:
       world_data[y][x] = 0
 
