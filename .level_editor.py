@@ -52,6 +52,7 @@ for row in range(rows):
   world_data.append(r)
 
 # create ground
+# grass
 for tile in range(0, max_cols):
   world_data[rows - 4][tile] = 2
 
@@ -59,6 +60,15 @@ for tile in range(0, max_cols):
   world_data[rows - 3][tile] = 7
   world_data[rows - 2][tile] = 7
   world_data[rows - 1][tile] = 7
+
+# brick
+# for tile in range(0, max_cols):
+#   world_data[rows - 4][tile] = 22
+
+# for tile in range(0, max_cols):
+#   world_data[rows - 3][tile] = 25
+#   world_data[rows - 2][tile] = 25
+#   world_data[rows - 1][tile] = 25
 
 def draw_text(text, font, text_col, x, y):
   img = font.render(text, True, text_col)
@@ -80,6 +90,10 @@ grass_tiles_assets = {
   "grass_float1": pygame.image.load('assets/grass_float1.png').convert_alpha(),
   "grass_float2": pygame.image.load('assets/grass_float2.png').convert_alpha(),
   "grass_float3": pygame.image.load('assets/grass_float3.png').convert_alpha(),
+  "grass_corner1": pygame.image.load('assets/grass_corner1.png').convert_alpha(),
+  "grass_corner2": pygame.image.load('assets/grass_corner2.png').convert_alpha(),
+  "grass_corner3": pygame.image.load('assets/grass_corner3.png').convert_alpha(),
+  "grass_corner4": pygame.image.load('assets/grass_corner4.png').convert_alpha(),
 }
 
 misc_assets = {
@@ -87,9 +101,21 @@ misc_assets = {
   "flag": pygame.image.load('assets/flag.png').convert_alpha(),
 }
 
-grass_tiles = {}
+brick_tiles_assets = {
+  "brick_tl": pygame.image.load('assets/brick_tl.png').convert_alpha(),
+  "brick_tm": pygame.image.load('assets/brick_tm.png').convert_alpha(),
+  "brick_tr": pygame.image.load('assets/brick_tr.png').convert_alpha(),
+  "brick_ml": pygame.image.load('assets/brick_ml.png').convert_alpha(),
+  "brick_m": pygame.image.load('assets/brick_m.png').convert_alpha(),
+  "brick_mr": pygame.image.load('assets/brick_mr.png').convert_alpha(),
+  "brick_bl": pygame.image.load('assets/brick_bl.png').convert_alpha(),
+  "brick_bm": pygame.image.load('assets/brick_bm.png').convert_alpha(),
+  "brick_br": pygame.image.load('assets/brick_br.png').convert_alpha(),
+}
 
+grass_tiles = {}
 misc_tiles = {}
+brick_tiles = {}
 
 asset_index = 1
 for asset in grass_tiles_assets:
@@ -98,6 +124,10 @@ for asset in grass_tiles_assets:
 
 for asset in misc_assets:
   misc_tiles.update({asset_index: misc_assets.get(asset)})
+  asset_index += 1
+
+for asset in brick_tiles_assets:
+  brick_tiles.update({asset_index: brick_tiles_assets.get(asset)})
   asset_index += 1
 
 # assets = {'grass_tiles': grass_tiles, 'misc_tiles': misc_tiles}
@@ -142,6 +172,17 @@ for i in range(len(grass_tiles), len(grass_tiles) + len(misc_tiles)):
     button_row += 1
     button_col = 0
 
+brick_lower_index = len(grass_tiles) + len(misc_tiles)
+brick_upper_index = len(grass_tiles) + len(misc_tiles) + len(brick_tiles)
+
+for i in range(brick_lower_index, brick_upper_index):
+  tile_button = button.Button(screen.get_width() - 300 + (75 * button_col) + 50, 75 * button_row + 50, brick_tiles.get(i + 1), 1)
+  button_list.append(tile_button)
+  button_col += 1
+  if button_col == 3:
+    button_row += 1
+    button_col = 0
+
 # background
 def draw_bg():
   pygame.draw.rect(screen, "#708090", (0, 0, 1920, 1080))
@@ -149,12 +190,15 @@ def draw_bg():
 def draw_world():
   for y, row in enumerate(world_data):
     for x, tile in enumerate(row):
-      if tile >= 1 and tile <= 14:
+      if tile >= 1 and tile <= 18:
         img = pygame.transform.scale(grass_tiles.get(tile), (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size))
-      if tile >= 15:
+      if tile >= 19 and tile <= 20:
         img = pygame.transform.scale(misc_tiles.get(tile), (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size + 10))
+      if tile >= 21 and tile <= 28:
+        img = pygame.transform.scale(brick_tiles.get(tile), (tile_size, tile_size))
+        screen.blit(img, (x * tile_size - scroll, y * tile_size))
 
 # game loop
 run = True
