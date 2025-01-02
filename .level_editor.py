@@ -53,22 +53,22 @@ for row in range(rows):
 
 # create ground
 # grass
-for tile in range(0, max_cols):
-  world_data[rows - 4][tile] = 2
+# for tile in range(0, max_cols):
+#   world_data[rows - 4][tile] = 2
 
-for tile in range(0, max_cols):
-  world_data[rows - 3][tile] = 7
-  world_data[rows - 2][tile] = 7
-  world_data[rows - 1][tile] = 7
+# for tile in range(0, max_cols):
+#   world_data[rows - 3][tile] = 7
+#   world_data[rows - 2][tile] = 7
+#   world_data[rows - 1][tile] = 7
 
 # brick
-# for tile in range(0, max_cols):
-#   world_data[rows - 4][tile] = 22
+for tile in range(0, max_cols):
+  world_data[rows - 4][tile] = 22
 
-# for tile in range(0, max_cols):
-#   world_data[rows - 3][tile] = 25
-#   world_data[rows - 2][tile] = 25
-#   world_data[rows - 1][tile] = 25
+for tile in range(0, max_cols):
+  world_data[rows - 3][tile] = 25
+  world_data[rows - 2][tile] = 25
+  world_data[rows - 1][tile] = 25
 
 def draw_text(text, font, text_col, x, y):
   img = font.render(text, True, text_col)
@@ -99,6 +99,7 @@ grass_tiles_assets = {
 misc_assets = {
   "sign": pygame.image.load('assets/sign.png').convert_alpha(),
   "flag": pygame.image.load('assets/flag.png').convert_alpha(),
+  "location": pygame.image.load('assets/location.png').convert_alpha(),
 }
 
 brick_tiles_assets = {
@@ -113,9 +114,22 @@ brick_tiles_assets = {
   "brick_br": pygame.image.load('assets/brick_br.png').convert_alpha(),
 }
 
+hazard_assets = {
+  "spike": pygame.image.load('assets/spike.png').convert_alpha(),
+  "spike_left": pygame.image.load('assets/spike_left.png').convert_alpha(),
+  "spike_right": pygame.image.load('assets/spike_right.png').convert_alpha(),
+  "spike_top": pygame.image.load('assets/spike_top.png').convert_alpha(),
+}
+
+collectible_assets = {
+  "golden_leaf": pygame.image.load('assets/golden_leaf.png').convert_alpha(),
+}
+
 grass_tiles = {}
 misc_tiles = {}
 brick_tiles = {}
+hazard_tiles = {}
+collectible_tiles = {}
 
 asset_index = 1
 for asset in grass_tiles_assets:
@@ -130,10 +144,13 @@ for asset in brick_tiles_assets:
   brick_tiles.update({asset_index: brick_tiles_assets.get(asset)})
   asset_index += 1
 
-# assets = {'grass_tiles': grass_tiles, 'misc_tiles': misc_tiles}
+for asset in hazard_assets:
+  hazard_tiles.update({asset_index: hazard_assets.get(asset)})
+  asset_index += 1
 
-# with open('assets.json', 'w') as file:
-#   json.dump(assets, file)
+for asset in collectible_assets:
+  collectible_tiles.update({asset_index: collectible_assets.get(asset)})
+  asset_index += 1
 
 # level editor grid
 def draw_grid():
@@ -183,6 +200,28 @@ for i in range(brick_lower_index, brick_upper_index):
     button_row += 1
     button_col = 0
 
+hazard_lower_index = brick_upper_index
+hazard_upper_index = brick_upper_index + len(hazard_tiles)
+
+for i in range(hazard_lower_index, hazard_upper_index):
+  tile_button = button.Button(screen.get_width() - 300 + (75 * button_col) + 50, 75 * button_row + 50, hazard_tiles.get(i + 1), 1)
+  button_list.append(tile_button)
+  button_col += 1
+  if button_col == 3:
+    button_row += 1
+    button_col = 0
+
+collectible_lower_index = hazard_upper_index
+collectible_upper_index = hazard_upper_index + len(collectible_tiles)
+
+for i in range(collectible_lower_index, collectible_upper_index):
+  tile_button = button.Button(screen.get_width() - 300 + (75 * button_col) + 50, 75 * button_row + 50, collectible_tiles.get(i + 1), 1)
+  button_list.append(tile_button)
+  button_col += 1
+  if button_col == 3:
+    button_row += 1
+    button_col = 0
+
 # background
 def draw_bg():
   pygame.draw.rect(screen, "#708090", (0, 0, 1920, 1080))
@@ -193,13 +232,26 @@ def draw_world():
       if tile >= 1 and tile <= 18:
         img = pygame.transform.scale(grass_tiles.get(tile), (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size))
-      if tile >= 19 and tile <= 20:
+      if tile >= 19 and tile <= 21:
         img = pygame.transform.scale(misc_tiles.get(tile), (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size + 10))
-      if tile >= 21 and tile <= 28:
+      if tile >= 22 and tile <= 30:
         img = pygame.transform.scale(brick_tiles.get(tile), (tile_size, tile_size))
         screen.blit(img, (x * tile_size - scroll, y * tile_size))
-
+      if tile >= 31 and tile <= 34:
+        img = pygame.transform.scale(hazard_tiles.get(tile), (tile_size, tile_size))
+        if tile == 31:
+          screen.blit(img, (x * tile_size - scroll, y * tile_size + 42))
+        elif tile == 32:
+          screen.blit(img, (x * tile_size - scroll - 30, y * tile_size))
+        elif tile == 33:
+          screen.blit(img, (x * tile_size - scroll + 30, y * tile_size))
+        elif tile == 34:
+          screen.blit(img, (x * tile_size - scroll, y * tile_size - 42))
+      if tile >= 35:
+        img = pygame.transform.scale(collectible_tiles.get(tile), (tile_size, tile_size))
+        screen.blit(img, (x * tile_size - scroll, y * tile_size))
+      
 # game loop
 run = True
 while run:

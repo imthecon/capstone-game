@@ -42,6 +42,7 @@ sfx = {
   'pickup': mixer.Sound('sounds/pickup.wav'),
   'fallen': mixer.Sound('sounds/fallen.wav'),
   'respawn': mixer.Sound('sounds/respawn.wav'),
+  'hurt': mixer.Sound('sounds/hurt.wav'),
 }
 
 for key, sound in sfx.items():
@@ -155,6 +156,8 @@ level_messages = [
 
 num_previous_signs = 0
 
+reset_transition_timer = None
+
 # closing black bars (transition)
 bar_height = screen_height // 2
 
@@ -195,6 +198,9 @@ anxiety_icon = pygame.transform.scale2x(anxiety_icon_base)
 happiness_icon_base = pygame.image.load('assets/happiness.png').convert_alpha()
 happiness_icon = pygame.transform.scale2x(happiness_icon_base)
 
+info_icon_base = pygame.image.load('assets/info.png').convert_alpha()
+info_icon = pygame.transform.scale_by(info_icon_base, 1.5)
+
 # tilesets
 # with open('assets.json', 'r') as file:
 #   assets = json.load(file)
@@ -202,6 +208,7 @@ happiness_icon = pygame.transform.scale2x(happiness_icon_base)
 # grass_tiles = assets['grass_tiles']
 # misc_tiles = assets['misc_tiles']
 
+# load assets
 # load assets
 grass_tiles_assets = {
   "grass_tl": pygame.image.load('assets/grass_tl.png').convert_alpha(),
@@ -227,6 +234,7 @@ grass_tiles_assets = {
 misc_assets = {
   "sign": pygame.image.load('assets/sign.png').convert_alpha(),
   "flag": pygame.image.load('assets/flag.png').convert_alpha(),
+  "location": pygame.image.load('assets/location.png').convert_alpha(),
 }
 
 brick_tiles_assets = {
@@ -241,9 +249,21 @@ brick_tiles_assets = {
   "brick_br": pygame.image.load('assets/brick_br.png').convert_alpha(),
 }
 
+hazard_assets = {
+  "spike": pygame.image.load('assets/spike.png').convert_alpha(),
+  "spike_left": pygame.image.load('assets/spike_left.png').convert_alpha(),
+  "spike_right": pygame.image.load('assets/spike_right.png').convert_alpha(),
+  "spike_top": pygame.image.load('assets/spike_top.png').convert_alpha(),
+}
+collectible_assets = {
+  "golden_leaf": pygame.image.load('assets/golden_leaf.png').convert_alpha(),
+}
+
 grass_tiles = {}
 misc_tiles = {}
 brick_tiles = {}
+hazard_tiles = {}
+collectible_tiles = {}
 
 asset_index = 1
 for asset in grass_tiles_assets:
@@ -258,12 +278,20 @@ for asset in brick_tiles_assets:
   brick_tiles.update({asset_index: brick_tiles_assets.get(asset)})
   asset_index += 1
 
+for asset in hazard_assets:
+  hazard_tiles.update({asset_index: hazard_assets.get(asset)})
+  asset_index += 1
+
+for asset in collectible_assets:
+  collectible_tiles.update({asset_index: collectible_assets.get(asset)})
+  asset_index += 1
+
 # collectibles
 golden_leaf_img = pygame.image.load('assets/golden_leaf.png').convert_alpha()
 
-collectibles = {
-  'golden_leaf': golden_leaf_img,
-}
+# collectibles = {
+#   'golden_leaf': golden_leaf_img,
+# }
 
 # spritesheets
 idle_main = pygame.image.load('assets/idle.png').convert_alpha()
@@ -375,7 +403,9 @@ class Player():
     self.pixel_h = 120
     self.image = pygame.transform.scale(animation_list[0][0], (self.pixel_w, self.pixel_h))
     self.rect = pygame.Rect(x, y, self.image.get_width(), self.image.get_height())
-    self.rect.height -= 14
+    self.width_adjustment = 30
+    self.rect.width -= self.width_adjustment
+    self.rect.height -= 16
     # self.rect.x = x
     # self.rect.y = y
     # self.width = self.image.get_width()
@@ -390,11 +420,19 @@ class Player():
     self.dx = 0
     self.dy = 0
     self.max_speed = 1
-    self.energy = 20
+    self.energy = 350
     self.mood = 1
     
+    self.touching_hazard = False
+
     self.fallen = False
     self.fallen_start_time = None
+
+    self.coyote_timer = 0
+    self.coyote_time_limit = 100
+    self.jumped_during_coyote = False
+
+    self.energy_loss_mult = 1
   
   def handle_input(self):
     global action, frame, animation_cooldown
@@ -408,30 +446,40 @@ class Player():
       self.dx = -self.max_speed
       self.flip = True
       self.direction = -1
-      self.energy -= 0.05 * player.max_speed
+      self.energy -= (0.05 * player.max_speed) / self.energy_loss_mult
     elif moving_right:
       # self.dx = min(self.dx + 0.1, 2) # start speeding up (to the right) from 0.25 to 3
       self.dx = self.max_speed
       self.flip = False
       self.direction = 1
-      self.energy -= 0.05 * player.max_speed
+      self.energy -= (0.05 * player.max_speed) / self.energy_loss_mult
     else:
       self.dx = 0
     
+    # coyote timer
+    if self.on_ground:
+      self.coyote_timer = pygame.time.get_ticks()
+      self.jumped_during_coyote = False
+    
     # if player presses space while on the ground, set jumping to true and reset jump variables
-    if keys[pygame.K_SPACE] and self.on_ground and self.mood == 1 and not new_level_pause and not player.fallen:
-      sfx['jump'].play()
-      self.jumping = True
-      self.jump_timer = 0
-      self.dy = 5
-      frame = 0
-      action = 2
+    if keys[pygame.K_SPACE] and not new_level_pause and not player.fallen:
+      current_time = pygame.time.get_ticks()
+
+      if self.on_ground or current_time - self.coyote_timer <= self.coyote_time_limit and not self.jumped_during_coyote:
+        sfx['jump'].play()
+        self.jumping = True
+        self.jump_timer = 0
+        self.dy = 7
+        frame = 0
+        # action = 2
+        self.on_ground = False
+        self.jumped_during_coyote = True
 
     # change dy in increasing amounts as player holds space longer
-    if keys[pygame.K_SPACE] and self.jumping:
+    if keys[pygame.K_SPACE] and self.jumping and self.mood == 4:
       if self.jump_timer < self.max_jump_time:
         self.jump_timer += 1
-        self.dy = 5 + 2 * (self.jump_timer / self.max_jump_time)
+        self.dy = 5 + 3 * (self.jump_timer / self.max_jump_time)
       else:
         self.jumping = False
 
@@ -461,10 +509,10 @@ class Player():
       animation_cooldown = 150
 
   def move(self):
-    global action, frame, reset_level
+    global action, frame, reset_level, adjusted_hitbox
 
     screen_scroll = 0
-    
+
     # gravity
     if not self.on_ground:
       if self.dy < 0:
@@ -504,9 +552,9 @@ class Player():
     
     # reduce energy based on player's y velocity:
     if self.dy > self.gravity:
-      self.energy -= 0.05 * abs(self.dy)
+      self.energy -= 0.05 * abs(self.dy) / self.energy_loss_mult
     
-    # flag touching detection (next level)
+    # finish flag touching detection (next level)
     for tile in world.non_obstacle_list:
       if tile[2] == 20:
         if tile[1].colliderect(self.rect):
@@ -526,15 +574,35 @@ class Player():
     self.move()
     self.image = pygame.transform.scale(animation_list[action][frame], (self.pixel_w, self.pixel_h))
 
+    # change energy loss based on player emotion
+    if self.mood == 1:
+      self.energy_loss_mult = 2
+    else:
+      self.energy_loss_mult = 1
+
     if not self.fallen or not self.flip:
       screen.blit(pygame.transform.flip(self.image, self.flip, False), self.rect)
     else:
       screen.blit(pygame.transform.flip(self.image, self.flip, False), (self.rect.x - 128, self.rect.y, self.rect.width, self.rect.height))
     
-    if self.energy < 0 and self.on_ground:
+    # check if player is touching hazards
+    for tile in world.hazard_list:
+      if self.rect.colliderect(tile[1].inflate(5, 0)):
+        self.touching_hazard = True
+        self.dy = 0
+        self.gravity = 0
+    
+    # fallen off the map detection
+    if self.rect.y > 1080:
+      self.touching_hazard = True
+    
+    if not self.fallen and ((self.energy < 0 and self.on_ground) or self.touching_hazard):
       self.energy = 0
 
       self.fallen = True
+
+      if self.touching_hazard:
+        sfx['hurt'].play()
 
       sfx['fallen'].play()
 
@@ -555,7 +623,7 @@ class Player():
 
       if elapsed_time >= 2000:
         reset_level = True
-
+      
 class Collectible(pygame.sprite.Sprite):
   def __init__(self, item_type, x, y, scale):
     pygame.sprite.Sprite.__init__(self)
@@ -588,7 +656,7 @@ class Collectible(pygame.sprite.Sprite):
     self.rect.y = self.start_y + amplitude * math.sin(2 * math.pi * frequency * time)
 
 # create collectible groups
-collectible_group = pygame.sprite.Group()
+# collectible_group = pygame.sprite.Group()
 
 class EnergyBar():
   def __init__(self, x, y, energy, max_energy):
@@ -615,10 +683,11 @@ class Message():
     self.complete = False
   
   def draw(self):
-    if self.counter < self.speed * len(self.message): # if the message has NOT completed rendering
+    if not self.complete: # if the message has NOT completed rendering
       self.counter += 1
-    elif self.counter >= self.speed * len(self.message): # if the message has completed rendering
-      self.complete = True
+      
+      if self.counter >= self.speed * len(self.message): # if the message has completed rendering
+        self.complete = True
     
     snippet = font1.render(self.message[0:self.counter // self.speed], True, "white") # render the text onto the screen
 
@@ -628,8 +697,8 @@ class Message():
     screen.blit(snippet, (x_pos, 995))
 
 messages = [
-  Message("1 I don't know if I can carry on much longer.", speed=2),
-  Message("2 It feels like I'm ... falling.", speed=2),
+  Message("I don't know if I can carry on much longer.", speed=2),
+  Message("It feels like I'm ... falling.", speed=2),
   Message("3", speed=2),
   Message("4", speed=2),
   Message("5", speed=2),
@@ -713,28 +782,29 @@ credits_scene = Credits(
 )
 
 # draw text
-def draw_text(text, font, text_col, x, y):
-  img = font.render(text, True, text_col)
-  screen.blit(img, (x, y))
+def draw_text(text, font, colour, x, y):
+  text_surface = font.render(text, True, colour)
+  screen.blit(text_surface, (x, y))
+  return text_surface
 
 # background
 bg_layer1_main_base = pygame.image.load('assets/tree1.png').convert_alpha()
-bg_layer1_main = pygame.transform.scale_by(bg_layer1_main_base, 4.9)
+bg_layer1_main = pygame.transform.scale_by(bg_layer1_main_base, 6)
 
 bg_layer2_main_base = pygame.image.load('assets/tree2.png').convert_alpha()
-bg_layer2_main = pygame.transform.scale_by(bg_layer2_main_base, 4.9)
+bg_layer2_main = pygame.transform.scale_by(bg_layer2_main_base, 6)
 
 bg_layer3_main_base = pygame.image.load('assets/tree3.png').convert_alpha()
-bg_layer3_main = pygame.transform.scale_by(bg_layer3_main_base, 4.9)
+bg_layer3_main = pygame.transform.scale_by(bg_layer3_main_base, 6)
 
 bg_layer1_city_base = pygame.image.load('assets/city1.png').convert_alpha()
-bg_layer1_city = pygame.transform.scale_by(bg_layer1_city_base, 4.9)
+bg_layer1_city = pygame.transform.scale_by(bg_layer1_city_base, 6)
 
 bg_layer2_city_base = pygame.image.load('assets/city2.png').convert_alpha()
-bg_layer2_city = pygame.transform.scale_by(bg_layer2_city_base, 4.9)
+bg_layer2_city = pygame.transform.scale_by(bg_layer2_city_base, 6)
 
 bg_layer3_city_base = pygame.image.load('assets/city3.png').convert_alpha()
-bg_layer3_city = pygame.transform.scale_by(bg_layer3_city_base, 4.9)
+bg_layer3_city = pygame.transform.scale_by(bg_layer3_city_base, 6)
 
 
 def draw_bg():
@@ -766,7 +836,9 @@ def draw_black_bars():
 class World():
   def __init__(self):
     self.obstacle_list = []
+    self.hazard_list = []
     self.non_obstacle_list = []
+    self.collectible_list = []
     self.sign_list = []
     self.sign_id = None
 
@@ -781,7 +853,7 @@ class World():
           img_rect.y = y * tile_size
           tile_data = (img, img_rect, tile)
           self.obstacle_list.append(tile_data)
-        elif tile >= 19 and tile <= 20:
+        elif tile >= 19 and tile <= 21:
           img = pygame.transform.scale(misc_tiles.get(tile), (tile_size, tile_size))
           img_rect = img.get_rect()
           img_rect.x = x * tile_size - (tile_size * 10)
@@ -790,13 +862,40 @@ class World():
           self.non_obstacle_list.append(tile_data)
           if tile == 19: # sign
             self.sign_list.append((img, img_rect, x, self.sign_id))
-        elif tile >= 21 and tile <= 28:
-          img = pygame.transform.scale(grass_tiles.get(tile), (tile_size, tile_size))
+        elif tile >= 22 and tile <= 30:
+          img = pygame.transform.scale(brick_tiles.get(tile), (tile_size, tile_size))
           img_rect = img.get_rect()
           img_rect.x = x * tile_size - (tile_size * 10)
           img_rect.y = y * tile_size
           tile_data = (img, img_rect, tile)
           self.obstacle_list.append(tile_data)
+        elif tile >= 31 and tile <= 34:
+          img = pygame.transform.scale(hazard_tiles.get(tile), (tile_size, tile_size))
+          img_rect = img.get_rect()
+          if tile == 31:
+            img_rect.height //= 2
+            img_rect.x = x * tile_size - (tile_size * 10)
+            img_rect.y = y * tile_size + 42
+          elif tile == 32:
+            img_rect.x = x * tile_size - (tile_size * 10) - 30
+            img_rect.y = y * tile_size
+          elif tile == 33:
+            img_rect.width //= 2.
+            img_rect.x = x * tile_size - (tile_size * 10) + 30
+            img_rect.y = y * tile_size
+          elif tile == 34:
+            img_rect.x = x * tile_size - (tile_size * 10)
+            img_rect.y = y * tile_size - 42
+          tile_data = (img, img_rect, tile)
+          self.hazard_list.append(tile_data)
+        elif tile >= 35:
+          img = pygame.transform.scale(collectible_tiles.get(tile), (tile_size - 12, tile_size - 12))
+          img_rect = img.get_rect()
+          img_rect.height //= 2
+          img_rect.x = x * tile_size - (tile_size * 10)
+          img_rect.y = y * tile_size
+          tile_data = (img, img_rect, tile)
+          self.collectible_list.append(tile_data)
       
       self.sign_list.sort(key=lambda sign: sign[2]) # sort sign_list by csv (grid) x (lowest to highest)
       
@@ -808,20 +907,28 @@ class World():
   def draw(self):
     for tile in self.obstacle_list:
       tile[1][0] += screen_scroll
-      screen.blit(tile[0], tile[1])
+      screen.blit(tile[0], (tile[1][0] + player.width_adjustment // 2, tile[1][1])) # player hitbox change here
+    for tile in self.hazard_list:
+      tile[1][0] += screen_scroll
+      screen.blit(tile[0], (tile[1][0] + player.width_adjustment // 2, tile[1][1])) # player hitbox change here
     for tile in self.non_obstacle_list:
       tile[1][0] += screen_scroll
-      screen.blit(tile[0], tile[1])
+      screen.blit(tile[0], (tile[1][0] + player.width_adjustment // 2, tile[1][1]))
+    for tile in self.collectible_list:
+      tile[1][0] += screen_scroll
+      screen.blit(tile[0], (tile[1][0] + player.width_adjustment // 2, tile[1][1]))
 
 # create instances
 player = Player(960, screen_height - 400)
 energy_bar = EnergyBar(245, 45, player.energy, player.energy)
 
-golden_leaf = Collectible('golden_leaf', 800, 700, 1)
-collectible_group.add(golden_leaf)
+# golden_leaf = Collectible('golden_leaf', 800, 700, 1)
+# collectible_group.add(golden_leaf)
 
 world = World()
 world.process_data(world_data)
+
+total_collectibles = len(world.collectible_list)
 
 # game loop
 run = True
@@ -840,12 +947,11 @@ while run:
     screen_scroll = player.move()
     bg_scroll -= screen_scroll
 
-    # check for sign nearby
+    # check if sign nearby
     for index, sign in enumerate(world.sign_list):
       if player.rect.colliderect(sign[1].inflate(150, 150)):
-        if not sign_audio_played:
-          # sfx['text_load'].play()
-          sign_audio_played = True
+        if messages[num_previous_signs + sign[3]].counter == 1:
+          sfx['text_load'].play()
 
         mark_base = pygame.image.load('assets/mark.png').convert_alpha()
         mark = pygame.transform.scale_by(mark_base, 1.5)
@@ -858,14 +964,18 @@ while run:
         x_pos = sign[1].centerx - mark_width // 2
         y_pos = sign[1].top - mark_height - 5
 
-        screen.blit(mark, (x_pos, y_pos + amplitude * math.sin(2 * math.pi * frequency * time)))
-        
-        messages[num_previous_signs + sign[3]].draw()
-      else:
-        sign_audio_played = False
-
+        screen.blit(mark, (x_pos + player.width_adjustment // 2, y_pos + amplitude * math.sin(2 * math.pi * frequency * time)))
+    
     # player update
     player.update()
+      
+    for index, sign in enumerate(world.sign_list):
+      if player.rect.colliderect(sign[1].inflate(150, 150)):
+        messages[num_previous_signs + sign[3]].draw()
+      else:
+        messages[num_previous_signs + sign[3]].counter = 0
+        messages[num_previous_signs + sign[3]].complete = False
+    
     
     # energy bar update
     energy_bar.draw(player.energy)
@@ -876,48 +986,88 @@ while run:
 
     # collection update
     screen.blit(pygame.transform.scale2x(golden_leaf_img), (1700, 40))
-    draw_text(f'{golden_leaf_collected}/1', font3, 'white', 1780, 40)
+    draw_text(f'{golden_leaf_collected}/{total_collectibles}', font3, 'white', 1780, 40)
 
+    # collection update
+    for tile in world.collectible_list:
+      if tile[2] == 35: # golden leaf
+        start_y = tile[1].y
+
+        time = pygame.time.get_ticks() / 1000
+        amplitude = 1  # up and down movement range
+        frequency = 2  # speed of oscillation
+
+        # cosine-based easing
+        tile[1].y = start_y + amplitude * math.cos(2 * math.pi * frequency * time)
+
+        if tile[1].colliderect(player.rect):
+          sfx['pickup'].play()
+          golden_leaf_collected += 1
+          world.collectible_list.remove(tile)
+
+    # emotions
     if player.mood == 1: # sadness
-      outline(sadness_icon, (50, 300), 255)
+      outline(sadness_icon, (100, 300), 255)
       sadness_icon.set_alpha(255)
-      draw_text('[1] Sadness', font2, 'white', 140, 305)
-
+      draw_text('[1] Sadness', font2, 'white', 190, 305)
     else:
-      outline(sadness_icon, (50, 300), 50)
+      outline(sadness_icon, (100, 300), 50)
       sadness_icon.set_alpha(50)
-      draw_text('[1] Sadness', font1, 'white', 140, 315)
-    screen.blit(sadness_icon, (50, 300))
+      draw_text('[1] Sadness', font1, 'white', 190, 315)
+    screen.blit(sadness_icon, (100, 300))
 
     if player.mood == 2: # fear
-      outline(fear_icon, (50, 390), 255)
+      outline(fear_icon, (100, 390), 255)
       fear_icon.set_alpha(255)
-      draw_text('[2] Fear', font2, 'white', 140, 395)
+      draw_text('[2] Fear', font2, 'white', 190, 395)
     else:
-      outline(fear_icon, (50, 390), 50)
+      outline(fear_icon, (100, 390), 50)
       fear_icon.set_alpha(50)
-      draw_text('[2] Fear', font1, 'white', 140, 405)
-    screen.blit(fear_icon, (50, 390))
+      draw_text('[2] Fear', font1, 'white', 190, 405)
+    screen.blit(fear_icon, (100, 390))
     
     if player.mood == 3: # anxiety
-      outline(anxiety_icon, (50, 480), 255)
+      outline(anxiety_icon, (100, 480), 255)
       anxiety_icon.set_alpha(255)
-      draw_text('[3] Anxiety', font2, 'white', 140, 485)
+      draw_text('[3] Anxiety', font2, 'white', 190, 485)
     else:
-      outline(anxiety_icon, (50, 480), 50)
+      outline(anxiety_icon, (100, 480), 50)
       anxiety_icon.set_alpha(50)
-      draw_text('[3] Anxiety', font1, 'white', 140, 495)
-    screen.blit(anxiety_icon, (50, 480))
+      draw_text('[3] Anxiety', font1, 'white', 190, 495)
+    screen.blit(anxiety_icon, (100, 480))
 
     if player.mood == 4: # happiness
-      outline(happiness_icon, (50, 570), 255)
+      outline(happiness_icon, (100, 570), 255)
       happiness_icon.set_alpha(255)
-      draw_text('[4] Happiness', font2, 'white', 140, 575)
+      draw_text('[4] Happiness', font2, 'white', 190, 575)
     else:
-      outline(happiness_icon, (50, 570), 50)
+      outline(happiness_icon, (100, 570), 50)
       happiness_icon.set_alpha(50)
-      draw_text('[4] Happiness', font1, 'white', 140, 585)
-    screen.blit(happiness_icon, (50, 570))
+      draw_text('[4] Happiness', font1, 'white', 190, 585)
+    screen.blit(happiness_icon, (100, 570))
+
+    # info icons
+    icon_positions = [(40, 305), (40, 395), (40, 485), (40, 575)]
+    
+    icon_rects = []
+
+    icon_info = [
+      "Sadness: Basic movement; conserve energy",
+      "Fear: Hold shift to sprint",
+      "Anxiety: ?",
+      "Happiness: Hold jump to jump higher",
+    ]
+
+    for pos in icon_positions:
+      rect = screen.blit(info_icon, pos)
+      icon_rects.append(rect)
+
+    for i, rect in enumerate(icon_rects):
+      if rect.collidepoint(pygame.mouse.get_pos()):
+        info_text = draw_text(icon_info[i], font1, "white", icon_rects[i][0] + 60, icon_rects[i][1])
+        pygame.draw.rect(screen, 'black', (icon_rects[i].x + 60, icon_rects[i].y, info_text.get_width() + 20, info_text.get_height() + 10))
+        
+        draw_text(icon_info[i], font1, "white", icon_rects[i][0] + 70, icon_rects[i][1] + 5)
 
     # update and draw groups
     # for collectible in collectible_group:
@@ -983,9 +1133,9 @@ while run:
 
       if start_game:
         # "curtain" opening for a new level
-        if bar_height > 0 and event.key == pygame.K_e:
+        if bar_height == 640 and event.key == pygame.K_e:
           player.mood = 1
-          switch_cooldown = 0
+          switch_cooldown = 250
 
           animation_list[0] = temp_anim_array[0]
           animation_list[1] = temp_anim_array[1]
@@ -1129,12 +1279,12 @@ while run:
 
   # level switch bar close and open
   if reset_level:
+    bar_height = 640
+
     # play 1up sound effect
     if not oneup_played:
       sfx['1up'].play()
       oneup_played = True
-
-    bar_height = 640
 
     # add number of signs to list (before changing world)
     if not player.fallen:
@@ -1152,14 +1302,16 @@ while run:
     if not player.fallen:
       level += 1
     
-    # create new world, player, and other instances
+    # reset and create new world, player, and other instances
     bg_scroll = 1000
-
     animation_cooldown = 150
+    golden_leaf_collected = 0
 
     player = Player(960, screen_height - 400)
     world = World()
     world.process_data(world_data)
+
+    total_collectibles = len(world.collectible_list)
 
     # empty world data list
     world_data = []
@@ -1190,6 +1342,8 @@ while run:
     new_level_pause = True
     reset_level = False
 
+    reset_transition_timer = None
+
   # time += 0.05
   # if start_game == False:
   #   screen_shader.send("time", [time])
@@ -1200,14 +1354,41 @@ while run:
   frame_tex.use(0)
   program['tex'] = 0
 
+  # print comments here
+
   if not start_game:
     program['r_value'] = 1
     program['g_value'] = 1
     program['b_value'] = 1
+  elif player.fallen:
+    if player.fallen_start_time is None:
+        player.fallen_start_time = pygame.time.get_ticks()
+    elapsed_time = pygame.time.get_ticks() - player.fallen_start_time
+
+    progress = elapsed_time / 4000
+
+    program['r_value'] = 1 * (1 - math.sin(progress * math.pi))
+    program['g_value'] = 1 * (1 - math.sin(progress * math.pi))
+    program['b_value'] = 1 * (1 - math.sin(progress * math.pi))
   elif player.mood == 1:
-    program['r_value'] = 0.7
-    program['g_value'] = 0.7
-    program['b_value'] = 0.8
+    if new_level_pause:
+      if reset_transition_timer is None:
+        reset_transition_timer = pygame.time.get_ticks()
+
+      elapsed_time = pygame.time.get_ticks() - reset_transition_timer
+
+      if elapsed_time < 50:
+        program['r_value'] = 0.0
+        program['g_value'] = 0.0
+        program['b_value'] = 0.0
+      else:
+        program['r_value'] = 1
+        program['g_value'] = 1
+        program['b_value'] = 1
+    else:
+      program['r_value'] = 0.7
+      program['g_value'] = 0.7
+      program['b_value'] = 0.8
   elif player.mood == 2:
     program['r_value'] = 0.8
     program['g_value'] = 0.4
